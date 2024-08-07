@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import nunjucks from "nunjucks";
+import { RenderPlugin } from "@11ty/eleventy";
 
 import { toArray } from "./util.js";
 import Bibliography from "./Bibliography.js";
@@ -12,35 +12,27 @@ export { Bibliography };
 
 const __dirname = fileURLToPath(new URL("..", import.meta.url));
 
-function defaultRenderCitation (citationTemplate) {
-	if (citationTemplate) {
-		return info => nunjucks.render(citationTemplate, info);
-	}
-	else {
-		let template = fs.readFileSync(__dirname + "/_includes/_citations.njk", "utf8");
-		return info => nunjucks.renderString(template, info);
-	}
-}
-
 let doiTemplates = {
 	url: '<a href="$&" class="doi">$&</a>',
 	id: '<a href="https://doi.org/$1" class="doi">$1</a>',
 };
 
 export default function (config, {
-	citationTemplate,
-	citationRender = defaultRenderCitation(citationTemplate),
+	citationTemplate = __dirname + "/_includes/_citations.njk",
+	citationRender,
 	style, locale, // defaults set in Bibliography
 	bibliography: globalBibliography,
 } = {}) {
 	const references = new Bibliographies({globalBibliography, style, locale});
+	let fileRenderer;
+	const render = citationRender ?? (async function(...args){
+		fileRenderer ??= await RenderPlugin.File(citationTemplate);
+		return fileRenderer.call(this, ...args);
+	});
 
-	function renderCitations (content) {
+	async function renderCitations (content) {
 		let refs = references.getOrCreate(this.page, this.ctx.bibliography);
-
-		return citations.render(content, refs, {
-			render: citationRender,
-		});
+		return await citations.render(content, refs, { render });
 	}
 
 	config.addGlobalData("referencesByPage", references);
